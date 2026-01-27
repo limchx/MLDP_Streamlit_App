@@ -48,13 +48,29 @@ st.markdown("""
 @st.cache_resource
 def load_assets():
     try:
-        bundle = joblib.load('Final_Model.joblib')
-        return bundle['model'], bundle['model_columns'], bundle['threshold']
-    except FileNotFoundError:
-        st.error("⚠️ Model file not found. Please ensure 'Final_Model.joblib' is in the folder.")
-        st.stop()
+        bundle = joblib.load('final_model_bundle.pkl')
+        
+        m = bundle.get('model')
+        c = bundle.get('model_columns') or bundle.get('features')
+        t = bundle.get('threshold')
+        
+        if m is None or c is None or t is None:
+            st.error("❌ Model bundle is incomplete. Check keys: 'model', 'model_columns', 'threshold'")
+            return None, None, None
+            
+        return m, c, t
+    except Exception as e:
+        st.error(f"⚠️ Error loading model: {e}")
+        return None, None, None
 
+# --- ASSIGN ASSETS GLOBALLY ---
 model, model_columns, threshold = load_assets()
+
+if model is None or model_columns is None:
+    st.warning("Please fix the model file and refresh the page.")
+    st.stop() 
+
+input_df = pd.DataFrame(columns=model_columns)
 
 # --- DASHBOARD HEADER ---
 with st.container():
@@ -80,49 +96,57 @@ with st.sidebar.expander("Employment & Financial", expanded=True):
     capital_gain = st.number_input("Asset Gains ($)", 0, 100000, 0, step=1000)
     capital_loss = st.number_input("Asset Losses ($)", 0, 5000, 0, step=100)
 
-# --- DATA PROCESSING ENGINE ---
-processed_data = pd.DataFrame(columns=model_columns)
-processed_data.loc[0] = 0
+input_df = pd.DataFrame(columns=model_columns)
+input_df.loc[0] = 0
 
-if 'age' in processed_data.columns: processed_data['age'] = age
-if 'education-num' in processed_data.columns: processed_data['education-num'] = education_num
-if 'hours-per-week' in processed_data.columns: processed_data['hours-per-week'] = hours_per_week
-if 'capital-gain' in processed_data.columns: processed_data['capital-gain'] = capital_gain
-if 'capital-loss' in processed_data.columns: processed_data['capital-loss'] = capital_loss
+if 'age' in input_df.columns: input_df['age'] = age
+if 'education-num' in input_df.columns: input_df['education-num'] = education_num
+if 'hours-per-week' in input_df.columns: input_df['hours-per-week'] = hours_per_week
+if 'capital-gain' in input_df.columns: input_df['capital-gain'] = capital_gain
+if 'capital-loss' in input_df.columns: input_df['capital-loss'] = capital_loss
 
-if 'Age-x-Education' in processed_data.columns:
-    processed_data['Age-x-Education'] = age * education_num
-if 'Capital-Gain-per-Hour' in processed_data.columns:
-    processed_data['Capital-Gain-per-Hour'] = capital_gain / (hours_per_week + 1)
+if 'Net-Capital' in input_df.columns:
+    input_df['Net-Capital'] = capital_gain - capital_loss
 
+if 'Work-Intensity' in input_df.columns:
+    input_df['Work-Intensity'] = age * hours_per_week
+
+if 'from_rich_region' in input_df.columns:
+    rich_regions = ['United-States', 'Canada', 'England', 'Germany', 'France', 'Japan', 'Italy']
+    input_df['from_rich_region'] = 1 
+
+# 3. Categorical One-Hot Encoding (Manual mapping for Top Features)
 if marital_status == "Married":
     col = 'marital-status_Married-civ-spouse'
-    if col in processed_data.columns: processed_data[col] = 1
+    if col in input_df.columns: input_df[col] = 1
+
+if relationship == "Husband":
+    col = 'relationship_Husband'
+    if col in input_df.columns: input_df[col] = 1
 
 if occupation == "Exec-managerial":
     col = 'occupation_Exec-managerial'
-    if col in processed_data.columns: processed_data[col] = 1
+    if col in input_df.columns: input_df[col] = 1
 
 if occupation == "Prof-specialty":
     col = 'occupation_Prof-specialty'
-    if col in processed_data.columns: processed_data[col] = 1
+    if col in input_df.columns: input_df[col] = 1
 
-# --- PREDICTION & BUSINESS INTELLIGENCE ---
 left_col, right_col = st.columns([1, 2])
 
 with left_col:
-    st.info("Click below to analyze this profile's eligibility for premium audience targeting.", icon="ℹ️")
+    st.info("Analyze this lead against the optimized ensemble threshold.", icon="ℹ️")
     if st.button("🚀 Analyze Lead Eligibility", use_container_width=True):
         
-        processed_data = processed_data[model_columns]
+        final_features = input_df[model_columns]
         
-        prediction_prob = model.predict_proba(processed_data)[0][1]
-        prediction_class = (prediction_prob >= threshold).astype(int)
+        prediction_prob = model.predict_proba(final_features)[0][1]
+        
+        prediction_class = 1 if prediction_prob >= threshold else 0
         
         st.session_state['prob'] = prediction_prob
         st.session_state['class'] = prediction_class
         st.session_state['run'] = True
-
 with right_col:
     if 'run' in st.session_state and st.session_state['run']:
         prob = st.session_state['prob']
