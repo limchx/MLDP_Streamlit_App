@@ -13,7 +13,6 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    
     div[data-testid="stMetric"] {
         background-color: #262730;
         border: 1px solid #31333F;
@@ -22,15 +21,12 @@ st.markdown("""
         border-radius: 8px;
         color: #FFFFFF;
     }
-    
     div[data-testid="stMetricLabel"] > label {
         color: #B2B5C9;
     }
-    
     section[data-testid="stSidebar"] {
         background-color: #18191E;
     }
-    
     div.stButton > button {
         background-color: #FFFFFF;
         color: #000000;
@@ -48,29 +44,34 @@ st.markdown("""
 @st.cache_resource
 def load_assets():
     try:
+        # Load the bundle
         bundle = joblib.load('final_model_bundle.pkl')
         
         m = bundle.get('model')
         c = bundle.get('model_columns') or bundle.get('features')
         t = bundle.get('threshold')
         
+        # VALIDATION: Ensure none of these are None
         if m is None or c is None or t is None:
-            st.error("❌ Model bundle is incomplete. Check keys: 'model', 'model_columns', 'threshold'")
+            st.error("❌ **Bundle Error:** Required components are missing from the .pkl file.")
+            st.info("Ensure your Notebook save block uses keys: 'model', 'model_columns', 'threshold'")
             return None, None, None
             
         return m, c, t
-    except Exception as e:
-        st.error(f"⚠️ Error loading model: {e}")
-        return None, None, None
 
-# --- ASSIGN ASSETS GLOBALLY ---
+    except FileNotFoundError:
+        st.error("⚠️ **File Not Found:** 'final_model_bundle.pkl' was not found in the project folder.")
+        return None, None, None
+    except Exception as e:
+        st.error(f"❌ **Unexpected Error:** {e}")
+        return None, None, None
+    
 model, model_columns, threshold = load_assets()
 
+# --- STOP EXECUTION IF ASSETS MISSING ---
 if model is None or model_columns is None:
-    st.warning("Please fix the model file and refresh the page.")
-    st.stop() 
-
-input_df = pd.DataFrame(columns=model_columns)
+    st.warning("The application cannot proceed without a valid model bundle. Please check the error messages above.")
+    st.stop()
 
 # --- DASHBOARD HEADER ---
 with st.container():
@@ -96,57 +97,49 @@ with st.sidebar.expander("Employment & Financial", expanded=True):
     capital_gain = st.number_input("Asset Gains ($)", 0, 100000, 0, step=1000)
     capital_loss = st.number_input("Asset Losses ($)", 0, 5000, 0, step=100)
 
-input_df = pd.DataFrame(columns=model_columns)
-input_df.loc[0] = 0
+# --- DATA PROCESSING ENGINE ---
+input_dict = {
+    'age': age,
+    'education-num': education_num,
+    'hours-per-week': hours_per_week,
+    'capital-gain': capital_gain,
+    'capital-loss': capital_loss,
+    'Net-Capital': capital_gain - capital_loss,
+    'Work-Intensity': age * hours_per_week
+}
 
-if 'age' in input_df.columns: input_df['age'] = age
-if 'education-num' in input_df.columns: input_df['education-num'] = education_num
-if 'hours-per-week' in input_df.columns: input_df['hours-per-week'] = hours_per_week
-if 'capital-gain' in input_df.columns: input_df['capital-gain'] = capital_gain
-if 'capital-loss' in input_df.columns: input_df['capital-loss'] = capital_loss
-
-if 'Net-Capital' in input_df.columns:
-    input_df['Net-Capital'] = capital_gain - capital_loss
-
-if 'Work-Intensity' in input_df.columns:
-    input_df['Work-Intensity'] = age * hours_per_week
-
-if 'from_rich_region' in input_df.columns:
-    rich_regions = ['United-States', 'Canada', 'England', 'Germany', 'France', 'Japan', 'Italy']
-    input_df['from_rich_region'] = 1 
-
-# 3. Categorical One-Hot Encoding (Manual mapping for Top Features)
+# 2. Add Categorical logic (One-Hot Encoding)
 if marital_status == "Married":
-    col = 'marital-status_Married-civ-spouse'
-    if col in input_df.columns: input_df[col] = 1
-
+    input_dict['marital-status_Married-civ-spouse'] = 1
 if relationship == "Husband":
-    col = 'relationship_Husband'
-    if col in input_df.columns: input_df[col] = 1
-
+    input_dict['relationship_Husband'] = 1
 if occupation == "Exec-managerial":
-    col = 'occupation_Exec-managerial'
-    if col in input_df.columns: input_df[col] = 1
-
+    input_dict['occupation_Exec-managerial'] = 1
 if occupation == "Prof-specialty":
-    col = 'occupation_Prof-specialty'
-    if col in input_df.columns: input_df[col] = 1
+    input_dict['occupation_Prof-specialty'] = 1
+
+processed_data = pd.DataFrame([input_dict])
+
+for col in model_columns:
+    if col not in processed_data.columns:
+        processed_data[col] = 0
+
+processed_data = processed_data[model_columns]
 
 left_col, right_col = st.columns([1, 2])
 
 with left_col:
-    st.info("Analyze this lead against the optimized ensemble threshold.", icon="ℹ️")
+    st.info("Click below to analyze this profile's eligibility for premium audience targeting.", icon="ℹ️")
     if st.button("🚀 Analyze Lead Eligibility", use_container_width=True):
         
-        final_features = input_df[model_columns]
-        
-        prediction_prob = model.predict_proba(final_features.values)[0][1]
+        prediction_prob = model.predict_proba(processed_data.values)[0][1]
         
         prediction_class = 1 if prediction_prob >= threshold else 0
         
         st.session_state['prob'] = prediction_prob
         st.session_state['class'] = prediction_class
         st.session_state['run'] = True
+
 with right_col:
     if 'run' in st.session_state and st.session_state['run']:
         prob = st.session_state['prob']
