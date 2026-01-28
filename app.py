@@ -45,24 +45,30 @@ st.markdown("""
 @st.cache_resource
 def load_assets():
     try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(current_dir, 'final_model_bundle.pkl')
+        script_dir = os.path.dirname(os.path.abspath(__file__))
         
-        bundle = joblib.load(model_path)
+        file_path = os.path.join(script_dir, 'final_model_bundle.pkl')
+        
+        bundle = joblib.load(file_path)
         
         m = bundle.get('model')
         c = bundle.get('model_columns') or bundle.get('features')
         t = bundle.get('threshold')
         s = bundle.get('scaler')
         
-        if m is None or c is None or t is None or s is None:
-            st.error("❌ Bundle Error: Missing 'model', 'model_columns', 'threshold', or 'scaler'")
+        if m is None or c is None or t is None:
+            st.error("❌ Bundle Error: Missing keys. Check your notebook save block.")
             return None, None, None, None
             
         return m, c, t, s
 
+    except FileNotFoundError:
+        st.error(f"⚠️ **File Not Found:** Could not find file at {file_path}")
+        st.info(f"Current Script Directory: {script_dir}")
+        st.info("Make sure 'final_model_bundle.pkl' is committed to the GitHub repo in the same folder as app.py.")
+        return None, None, None, None
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"❌ **Unexpected Error:** {e}")
         return None, None, None, None
     
 model, model_columns, threshold, scaler = load_assets()
