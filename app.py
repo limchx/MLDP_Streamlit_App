@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import numpy as np
+import os
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -44,14 +45,16 @@ st.markdown("""
 @st.cache_resource
 def load_assets():
     try:
-        # Load the bundle
-        bundle = joblib.load('final_model_bundle.pkl')
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        model_path = os.path.join(current_dir, 'final_model_bundle.pkl')
+        
+        bundle = joblib.load(model_path)
         
         m = bundle.get('model')
         c = bundle.get('model_columns') or bundle.get('features')
         t = bundle.get('threshold')
         
-        # VALIDATION: Ensure none of these are None
         if m is None or c is None or t is None:
             st.error("❌ **Bundle Error:** Required components are missing from the .pkl file.")
             st.info("Ensure your Notebook save block uses keys: 'model', 'model_columns', 'threshold'")
@@ -60,7 +63,8 @@ def load_assets():
         return m, c, t
 
     except FileNotFoundError:
-        st.error("⚠️ **File Not Found:** 'final_model_bundle.pkl' was not found in the project folder.")
+        st.error(f"⚠️ **File Not Found:** Could not find file at {model_path}")
+        st.info("Make sure 'final_model_bundle.pkl' is in the same folder as 'app.py'.")
         return None, None, None
     except Exception as e:
         st.error(f"❌ **Unexpected Error:** {e}")
