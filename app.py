@@ -46,7 +46,6 @@ st.markdown("""
 def load_assets():
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        
         model_path = os.path.join(current_dir, 'final_model_bundle.pkl')
         
         bundle = joblib.load(model_path)
@@ -54,23 +53,19 @@ def load_assets():
         m = bundle.get('model')
         c = bundle.get('model_columns') or bundle.get('features')
         t = bundle.get('threshold')
+        s = bundle.get('scaler')
         
-        if m is None or c is None or t is None:
-            st.error("❌ **Bundle Error:** Required components are missing from the .pkl file.")
-            st.info("Ensure your Notebook save block uses keys: 'model', 'model_columns', 'threshold'")
-            return None, None, None
+        if m is None or c is None or t is None or s is None:
+            st.error("❌ Bundle Error: Missing 'model', 'model_columns', 'threshold', or 'scaler'")
+            return None, None, None, None
             
-        return m, c, t
+        return m, c, t, s
 
-    except FileNotFoundError:
-        st.error(f"⚠️ **File Not Found:** Could not find file at {model_path}")
-        st.info("Make sure 'final_model_bundle.pkl' is in the same folder as 'app.py'.")
-        return None, None, None
     except Exception as e:
-        st.error(f"❌ **Unexpected Error:** {e}")
-        return None, None, None
+        st.error(f"Error: {e}")
+        return None, None, None, None
     
-model, model_columns, threshold = load_assets()
+model, model_columns, threshold, scaler = load_assets()
 
 # --- STOP EXECUTION IF ASSETS MISSING ---
 if model is None or model_columns is None:
@@ -133,10 +128,14 @@ processed_data = processed_data[model_columns]
 left_col, right_col = st.columns([1, 2])
 
 with left_col:
-    st.info("Click below to analyze this profile's eligibility for premium audience targeting.", icon="ℹ️")
+    st.info("Click below to analyze this profile's eligibility.", icon="ℹ️")
     if st.button("🚀 Analyze Lead Eligibility", use_container_width=True):
         
-        prediction_prob = model.predict_proba(processed_data.values)[0][1]
+        raw_input = processed_data[model_columns]
+        
+        transformed_input = scaler.transform(raw_input)
+        
+        prediction_prob = model.predict_proba(transformed_input)[0][1]
         
         prediction_class = 1 if prediction_prob >= threshold else 0
         
