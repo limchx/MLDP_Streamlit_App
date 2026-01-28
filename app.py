@@ -140,7 +140,7 @@ with left_col:
         
         final_features = input_df[model_columns]
         
-        prediction_prob = model.predict_proba(final_features)[0][1]
+        prediction_prob = model.predict_proba(final_features.values)[0][1]
         
         prediction_class = 1 if prediction_prob >= threshold else 0
         
